@@ -13,15 +13,17 @@ latitude = 52.19031860059984        #release latitude
 longitude = 3.7299480608392765       #release longitude
 releasetime = datetime.datetime(2011, 12, 12) #release time
 
+# Setting boundaries to release particles in, and length of grid in particles
 lats1 = np.linspace(latitude-0.05, latitude+0.05, 10)
 lons1 = np.linspace(longitude-0.05, longitude+0.05, 10)
 lats, lons = np.meshgrid(lats1, lons1)
 
-data_path = '/storage/shared/oceanparcels/input_data/MOi/' #The data path where all data is stored
+data_path = '/storage/shared/oceanparcels/input_data/MOi/' # The data path where all data is stored
 ufiles = sorted(glob(data_path+'psy4v3r1/psy4v3r1-daily_U_2011*.nc'))
 
 # ufiles= [data_path+'psy4v3r1/psy4v3r1-daily_U_2015-05-25.nc',data_path+'psy4v3r1/psy4v3r1-daily_U_2015-05-26.nc']
 
+# Code to load in velocity and temperature data as well
 vfiles = [f.replace('_U_', '_V_') for f in ufiles]
 wfiles = [f.replace('_U_', '_W_') for f in ufiles]
 tfiles = [f.replace('_U_', '_T_') for f in ufiles]
@@ -35,14 +37,14 @@ variables = {'U': 'vozocrtx', 'V': 'vomecrty', 'T': 'votemper'}
 dimensions = {'U': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
               'V': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
               'T': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'}}
-indices = {'depth': range(0, 2),'lat': range(1600, 2500), 'lon': range(2250, 3600)}  # At least two depth layers need to be loaded
+indices = {'depth': range(0, 2),'lat': range(1600, 2500), 'lon': range(2250, 3600)}  # At least two depth layers need to be loaded,  boundaries are set to only cover the Atlantic
 
-def delete_particle(particle, fieldset, time):
+def delete_particle(particle, fieldset, time): # Particles that drift out of boundaries are deleted
     particle.delete()
 
 fieldset = FieldSet.from_nemo(filenames, variables, dimensions, indices=indices)
 
-class SampleParticleInitZero(JITParticle):            
+class SampleParticleInitZero(JITParticle):  # Sampling the temperature          
     temperature = Variable('temperature', initial=0)  
 
 pset = ParticleSet.from_list(fieldset=fieldset, 
