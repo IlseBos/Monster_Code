@@ -1,0 +1,67 @@
+from parcels import Variable, FieldSet, ParticleSet, JITParticle, AdvectionRK4
+from glob import glob
+import cartopy
+import matplotlib.pyplot as plt
+import datetime
+import numpy as np
+from datetime import timedelta as delta
+import xarray as xr 
+import matplotlib as mpl
+from parcels.tools.statuscodes import ErrorCode
+
+latitude = 52.19031860059984        #release latitude
+longitude = 3.7299480608392765       #release longitude
+releasetime = datetime.datetime(2011, 12, 12) #release time
+
+lats1 = np.linspace(latitude-0.05, latitude+0.05, 10)
+lons1 = np.linspace(longitude-0.05, longitude+0.05, 10)
+lats, lons = np.meshgrid(lats1, lons1)
+
+data_path = '/storage/shared/oceanparcels/input_data/MOi/' #The data path where all data is stored
+ufiles = sorted(glob(data_path+'psy4v3r1/psy4v3r1-daily_U_2011*.nc'))
+
+# ufiles= [data_path+'psy4v3r1/psy4v3r1-daily_U_2015-05-25.nc',data_path+'psy4v3r1/psy4v3r1-daily_U_2015-05-26.nc']
+
+vfiles = [f.replace('_U_', '_V_') for f in ufiles]
+wfiles = [f.replace('_U_', '_W_') for f in ufiles]
+tfiles = [f.replace('_U_', '_T_') for f in ufiles]
+
+mesh_mask = data_path + 'domain_ORCA0083-N006/coordinates.nc'
+
+filenames = {'U': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': ufiles},
+             'V': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': vfiles},
+             'T':{'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tfiles}}
+variables = {'U': 'vozocrtx', 'V': 'vomecrty', 'T': 'votemper'}
+dimensions = {'U': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
+              'V': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
+              'T': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'}}
+indices = {'depth': range(0, 2),'lat': range(1600, 2500), 'lon': range(2250, 3600)}  # At least two depth layers need to be loaded
+
+def delete_particle(particle, fieldset, time):
+    particle.delete()
+
+fieldset = FieldSet.from_nemo(filenames, variables, dimensions, indices=indices)
+
+class SampleParticleInitZero(JITParticle):            
+    temperature = Variable('temperature', initial=0)  
+
+pset = ParticleSet.from_list(fieldset=fieldset, 
+                             pclass=SampleParticleInitZero, 
+                             lon=lons, 
+                             lat=lats, 
+                             time=releasetime)
+
+def SampleT(particle, fieldset, time):
+         particle.temperature = fieldset.T[time, particle.depth, particle.lat, particle.lon]
+sample_kernel = pset.Kernel(SampleT)  
+
+output_file = pset.ParticleFile(name="Monster_300.nc", outputdt=3600*24)
+
+                   
+pset.execute(AdvectionRK4 + sample_kernel,                 
+             runtime= datetime.timedelta(days=300),          
+             dt=-300,                       
+             output_file=output_file,
+             recovery={ErrorCode.ErrorOutOfBounds: delete_particle})
+
+output_file.export()
